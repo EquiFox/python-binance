@@ -1,4 +1,5 @@
 # coding=utf-8
+from threading import Lock
 
 import aiohttp
 import asyncio
@@ -92,7 +93,14 @@ class BaseClient(ABC):
         self.API_KEY = api_key
         self.API_SECRET = api_secret
         self.session = self._init_session()
+        self.used_weight = 0
+        self._used_weight_lock = Lock()
         self._requests_params = requests_params
+
+    def get_used_weight(self):
+        with self._used_weight_lock:
+            used_weight = self.used_weight
+        return used_weight
 
     def _get_headers(self):
         return {
@@ -2117,6 +2125,9 @@ class AsyncClient(BaseClient):
         if not str(response.status).startswith('2'):
             raise BinanceAPIException(response, response.status, await response.text())
         try:
+            with self._used_weight_lock:
+                self.used_weight = int(response.headers['X-MBX-USED-WEIGHT'])
+
             return await response.json()
         except ValueError:
             txt = await response.text()
