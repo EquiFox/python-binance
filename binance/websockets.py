@@ -438,6 +438,29 @@ class BinanceSocketManager:
         await self._start_socket(path, coro)
         return path
 
+    async def start_book_ticker_socket(self, coro):
+        """Start a websocket for the best bid or ask's price or quantity for all symbols.
+
+        https://github.com/binance-exchange/binance-official-api-docs/blob/master/web-socket-streams.md#all-book-tickers-stream
+
+        :param callback: callback function to handle messages
+        :type callback: function
+
+        :returns: connection key string if successful, False otherwise
+
+        Message Format
+
+        .. code-block:: python
+
+            {
+                // Same as <symbol>@bookTicker payload
+            }
+
+        """
+        path = '!bookTicker'
+        await self._start_socket(path, coro)
+        return path
+
     async def start_multiplex_socket(self, streams, coro):
         """Start a multiplexed socket using a list of socket names.
         User stream sockets can not be included.
