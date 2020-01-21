@@ -1,6 +1,9 @@
 import asyncio
 import json
 import logging
+import socket
+import time
+import traceback
 from random import random
 import websockets as ws
 
@@ -24,18 +27,20 @@ class ReconnectingWebsocket:
         self._reconnects = 0
         self._conn = None
         self._socket = None
+        self.timee = 0
 
         self._connect()
 
     def _connect(self):
         self._conn = asyncio.ensure_future(self._run(), loop=self._loop)
+        self.timee = time.time()
 
     async def _run(self):
 
         keep_waiting = True
 
         ws_url = self.STREAM_URL + self._prefix + self._path
-        async with ws.connect(ws_url) as socket:
+        async with ws.connect(ws_url, loop=self._loop, ping_interval=0) as socket:
             self._socket = socket
             self._reconnects = 0
 
@@ -60,7 +65,7 @@ class ReconnectingWebsocket:
                 self._log.debug('ws connection closed:{}'.format(e))
                 await self._reconnect()
             except Exception as e:
-                self._log.debug('ws exception:{}'.format(e))
+                self._log.debug('ws exception:{}'.format(traceback.format_exc(e)))
                 await self._reconnect()
 
     def _get_reconnect_wait(self, attempts: int) -> int:
@@ -70,16 +75,20 @@ class ReconnectingWebsocket:
     async def _reconnect(self):
         await self.cancel()
         self._reconnects += 1
+
+        while not self.is_connection_available():
+            time.sleep(1)
+
         if self._reconnects < self.MAX_RECONNECTS:
 
             self._log.debug("websocket {} reconnecting {} reconnects left".format(
                 self._path, self.MAX_RECONNECTS - self._reconnects)
             )
             reconnect_wait = self._get_reconnect_wait(self._reconnects)
-            await asyncio.sleep(reconnect_wait)
+            time.sleep(reconnect_wait)
             self._connect()
         else:
-            self._log.error('Max reconnections {} reached:'.format(self.MAX_RECONNECTS))
+            self._log.debug('Max reconnections {} reached:'.format(self.MAX_RECONNECTS))
 
     async def send_ping(self):
         if self._socket:
@@ -88,6 +97,14 @@ class ReconnectingWebsocket:
     async def cancel(self):
         self._conn.cancel()
         self._socket = None
+
+    def is_connection_available(self):
+        try:
+            socket.create_connection(("api.binance.com", 80))
+            return True
+        except OSError:
+            pass
+        return False
 
 
 class BinanceSocketManager:
@@ -527,7 +544,7 @@ class BinanceSocketManager:
 
         async def _run():
             user_listen_key = await self._client.stream_get_listen_key()
-            self._log.debug("new key {} old key {}".format(user_listen_key, self._user_listen_key))
+            print("new key {} old key {}".format(user_listen_key, self._user_listen_key))
             # check if they key changed and reconnect
             if user_listen_key != self._user_listen_key:
                 # Start a new socket with the key received
